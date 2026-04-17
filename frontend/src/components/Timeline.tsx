@@ -41,7 +41,7 @@ export default function Timeline({
     const handleDelete = async (id: string) => {
         if (!confirm("Delete this entry?")) return;
         try {
-            await deleteMood(id, user.role);
+            await deleteMood(id);
             onMoodDeleted();
         } catch (err) {
             console.error(err);
@@ -143,7 +143,7 @@ export default function Timeline({
                                                     color: "var(--accent)",
                                                 }}
                                             >
-                                                @{m.userId.username}
+                                                @{m.userId.name}
                                             </span>
                                         )}
                                         <span

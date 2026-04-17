@@ -4,22 +4,43 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Timeline from "@/components/Timeline";
 import StatsPanel from "@/components/StatsPanel";
-import { fetchMoods, fetchStats } from "@/lib/api";
+import {
+    fetchMoods,
+    fetchStats,
+    fetchUsers,
+    updateUserRole,
+    login,
+    fetchTrend,
+} from "@/lib/api";
+import { io } from "socket.io-client";
+import TrendChart from "@/components/TrendChart";
 
 export default function AdminDashboard() {
     const [user, setUser] = useState<any>(null);
     const [moods, setMoods] = useState<any[]>([]);
     const [stats, setStats] = useState({});
+    const [usersList, setUsersList] = useState<any[]>([]);
+    const [trendData, setTrendData] = useState<any[]>([]);
     const router = useRouter();
 
-    const loadData = useCallback(async (userData: any) => {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+
+    const loadData = useCallback(async () => {
         try {
-            const [moodsData, statsData] = await Promise.all([
-                fetchMoods(userData._id, userData.role),
-                fetchStats(userData._id, userData.role),
-            ]);
+            const [moodsData, statsData, usersData, trendDataRes] =
+                await Promise.all([
+                    fetchMoods(),
+                    fetchStats(),
+                    fetchUsers(),
+                    fetchTrend(),
+                ]);
             setMoods(moodsData);
             setStats(statsData);
+            setUsersList(usersData);
+            setTrendData(trendDataRes);
         } catch (err) {
             console.error(err);
         }
@@ -27,229 +48,189 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         const stored = localStorage.getItem("moodsnap_user");
-        if (!stored) {
-            router.push("/");
-            return;
+        if (stored) {
+            const userData = JSON.parse(stored);
+            if (userData.role === "admin") {
+                setUser(userData);
+                loadData();
+                setupSocket();
+            }
         }
-        const userData = JSON.parse(stored);
-        if (userData.role !== "admin") {
-            router.push("/user");
-            return;
+    }, [loadData]);
+
+    const setupSocket = () => {
+        const socket = io("http://localhost:5000");
+        socket.on("globalStatsUpdate", (newStats) => {
+            setStats(newStats);
+        });
+        socket.on("usersUpdated", () => {
+            fetchUsers().then(setUsersList);
+        });
+        return () => socket.disconnect();
+    };
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError("");
+        setIsLoading(true);
+        try {
+            const loggedInUser = await login(email, password);
+            if (loggedInUser.role !== "admin") {
+                setError("Unauthorised - Not an admin");
+                return;
+            }
+            localStorage.setItem("moodsnap_user", JSON.stringify(loggedInUser));
+            setUser(loggedInUser);
+            loadData();
+            setupSocket();
+        } catch {
+            setError("Invalid credentials");
+        } finally {
+            setIsLoading(false);
         }
-        setUser(userData);
-        loadData(userData);
-    }, [router, loadData]);
+    };
 
     const handleLogout = () => {
         localStorage.removeItem("moodsnap_user");
+        setUser(null);
         router.push("/");
+    };
+
+    const handleRoleChange = async (userId: string, newRole: string) => {
+        try {
+            await updateUserRole(userId, newRole);
+            await fetchUsers().then(setUsersList);
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     if (!user) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                    <div
-                        className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin"
-                        style={{
-                            borderColor: "var(--border)",
-                            borderTopColor: "transparent",
-                        }}
-                    />
-                    <span
-                        className="text-sm"
-                        style={{ color: "var(--fg-muted)" }}
-                    >
-                        Loading…
-                    </span>
+            <div className="min-h-screen flex items-center justify-center p-4">
+                <div className="card p-8 w-full max-w-[420px]">
+                    <h2 className="text-2xl font-bold mb-6 text-center">
+                        Admin Login
+                    </h2>
+                    {error && (
+                        <div className="text-red-500 mb-4 text-center">
+                            {error}
+                        </div>
+                    )}
+                    <form onSubmit={handleLogin}>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="input-field w-full px-4 py-3 mb-4"
+                            placeholder="Admin Email"
+                            required
+                        />
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="input-field w-full px-4 py-3 mb-6"
+                            placeholder="Password"
+                            required
+                        />
+                        <button
+                            disabled={isLoading}
+                            className="btn-primary w-full py-3"
+                        >
+                            {isLoading ? "Validating..." : "Login to Dashboard"}
+                        </button>
+                    </form>
                 </div>
             </div>
         );
     }
 
-    // Unique users count
-    const uniqueUsersCount = new Set(
-        moods.filter((m) => m.userId).map((m) => m.userId._id),
-    ).size;
-
-    const totalEntries = moods.length;
-
     return (
-        <div className="min-h-screen relative">
-            {/* Background decorations */}
-            {/* <div
-                className="w-screen absolute top-0 left-0 rounded-full opacity-15 pointer-events-none"
-                style={{
-                    background:
-                        "radial-gradient(circle, var(--sad-bg) 0%, transparent 70%)",
-                    transform: "translate(-30%, -30%)",
-                }}
-            />
-            <div
-                className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full opacity-15 pointer-events-none"
-                style={{
-                    background:
-                        "radial-gradient(circle, var(--accent-soft) 0%, transparent 70%)",
-                    transform: "translate(20%, 20%)",
-                }}
-            /> */}
-
-            <div className="max-w-5xl mx-auto p-5 md:p-8 relative">
-                {/* Header */}
-                <header className="max-w-screen flex items-center justify-between mb-10 animate-fade-in-up">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span
-                                className="text-[10px] uppercase tracking-widest font-semibold px-2.5 py-1 rounded-full"
-                                style={{
-                                    background: "var(--accent-soft)",
-                                    color: "var(--accent)",
-                                }}
-                            >
-                                Admin
-                            </span>
-                        </div>
-                        <h1
-                            className="text-2xl md:text-3xl font-semibold"
-                            style={{ fontFamily: "var(--font-display)" }}
-                        >
-                            Dashboard
-                        </h1>
-                    </div>
-
-                    <button
-                        id="admin-logout"
-                        onClick={handleLogout}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer"
-                        style={{
-                            border: "1px solid var(--border)",
-                            color: "var(--fg-secondary)",
-                            background: "var(--bg-card)",
-                        }}
-                        onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.borderColor =
-                                "var(--angry)";
-                            (e.currentTarget as HTMLElement).style.color =
-                                "var(--angry)";
-                        }}
-                        onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.borderColor =
-                                "var(--border)";
-                            (e.currentTarget as HTMLElement).style.color =
-                                "var(--fg-secondary)";
-                        }}
+        <div className="min-h-screen py-8 max-w-4xl mx-auto">
+            <header className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+                <button
+                    id="user-logout"
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer"
+                    style={{
+                        border: "1px solid var(--border)",
+                        color: "var(--fg-secondary)",
+                        background: "var(--bg-card)",
+                    }}
+                    onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLElement).style.borderColor =
+                            "var(--angry)";
+                        (e.currentTarget as HTMLElement).style.color =
+                            "var(--angry)";
+                    }}
+                    onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLElement).style.borderColor =
+                            "var(--border)";
+                        (e.currentTarget as HTMLElement).style.color =
+                            "var(--fg-secondary)";
+                    }}
+                >
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                     >
-                        <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span className="hidden sm:inline">Sign out</span>
-                    </button>
-                </header>
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    <span className="hidden sm:inline">Sign out</span>
+                </button>
+            </header>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2  gap-4 mb-8 animate-fade-in-up delay-1">
-                    {/* Active Users */}
-                    <div className="card p-5 group">
-                        <div className="flex items-center gap-3 mb-3">
-                            <div
-                                className="w-9 h-9 rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                                style={{ background: "var(--accent-soft)" }}
-                            >
-                                <svg
-                                    width="18"
-                                    height="18"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="var(--accent)"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                    <circle cx="9" cy="7" r="4" />
-                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                </svg>
+            <div className="flex flex-col lg:flex-row min-w-[50vw] gap-4 mb-8">
+                <StatsPanel stats={stats} role={user.role} />
+                <TrendChart trendData={trendData} />
+            </div>
+
+            <div className="mb-8 card p-6">
+                <h2 style={{ fontFamily: "var(--font-display)" }} className="text-xl font-bold mb-4">
+                    User Roles Management
+                </h2>
+                <div className="space-y-4">
+                    {usersList.map((u: any) => (
+                        <div
+                            key={u._id}
+                            className="flex justify-between items-center bg-zinc-100 dark:bg-[#2b2b2b] p-4 rounded-lg"
+                        >
+                            <div>
+                                <p className="font-semibold">{u.name}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    {u.email}
+                                </p>
                             </div>
-                            <span
-                                className="text-xs font-medium uppercase tracking-wider"
-                                style={{ color: "var(--fg-muted)" }}
+                            <select
+                                value={u.role}
+                                onChange={(e) =>
+                                    handleRoleChange(u._id, e.target.value)
+                                }
+                                className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-xl"
                             >
-                                Users
-                            </span>
+                                <option className=" dark:bg-black" value="user">User</option>
+                                <option className="dark:bg-black" value="admin">Admin</option>
+                            </select>
                         </div>
-                        <p
-                            className="text-3xl font-bold tabular-nums"
-                            style={{ fontFamily: "var(--font-display)" }}
-                        >
-                            {uniqueUsersCount}
-                        </p>
-                    </div>
-
-                    {/* Total Entries */}
-                    <div className="card p-5 group">
-                        <div className="flex items-center gap-3 mb-3">
-                            <div
-                                className="w-9 h-9 rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                                style={{ background: "var(--happy-bg)" }}
-                            >
-                                <svg
-                                    width="18"
-                                    height="18"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="var(--happy)"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14 2 14 8 20 8" />
-                                    <line x1="16" y1="13" x2="8" y2="13" />
-                                    <line x1="16" y1="17" x2="8" y2="17" />
-                                </svg>
-                            </div>
-                            <span
-                                className="text-xs font-medium uppercase tracking-wider"
-                                style={{ color: "var(--fg-muted)" }}
-                            >
-                                Entries
-                            </span>
-                        </div>
-                        <p
-                            className="text-3xl font-bold tabular-nums"
-                            style={{ fontFamily: "var(--font-display)" }}
-                        >
-                            {totalEntries}
-                        </p>
-                    </div>
-
-                    {/* Stats Panel (spans remaining) */}
-                    <div className="col-span-2  animate-fade-in-up delay-2">
-                        <StatsPanel stats={stats} role={user.role} />
-                    </div>
-                </div>
-
-                {/* Timeline */}
-                <div className="animate-fade-in-up delay-3">
-                    <Timeline
-                        moods={moods}
-                        user={user}
-                        onMoodDeleted={() => loadData(user)}
-                    />
+                    ))}
                 </div>
             </div>
+
+            <Timeline
+                moods={moods}
+                user={user}
+                onMoodDeleted={() => loadData()}
+            />
         </div>
     );
 }

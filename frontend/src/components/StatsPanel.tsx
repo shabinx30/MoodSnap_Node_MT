@@ -22,7 +22,7 @@ export default function StatsPanel({
     const total = Object.values(stats).reduce((a, b) => a + b, 0);
 
     return (
-        <div className="card p-6">
+        <div className="card p-6 flex-1">
             <h2
                 className="text-lg font-semibold mb-5"
                 style={{ fontFamily: "var(--font-display)" }}

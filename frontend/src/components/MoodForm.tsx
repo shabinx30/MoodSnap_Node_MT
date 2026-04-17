@@ -52,7 +52,7 @@ export default function MoodForm({
 
         setIsSubmitting(true);
         try {
-            await createMood(user._id, user.role, selectedMood, note);
+            await createMood(selectedMood, note);
             setNote("");
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 2000);

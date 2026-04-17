@@ -16,8 +16,8 @@ export default function UserDashboard() {
     const loadData = useCallback(async (userData: any) => {
         try {
             const [moodsData, statsData] = await Promise.all([
-                fetchMoods(userData._id, userData.role),
-                fetchStats(userData._id, userData.role),
+                fetchMoods(),
+                fetchStats(),
             ]);
             setMoods(moodsData);
             setStats(statsData);
@@ -102,7 +102,7 @@ export default function UserDashboard() {
                             className="text-2xl md:text-3xl font-semibold"
                             style={{ fontFamily: "var(--font-display)" }}
                         >
-                            {user.username}
+                            {user.name}
                         </h1>
                     </div>
 
