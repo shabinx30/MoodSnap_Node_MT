@@ -8,6 +8,10 @@ export class MoodRepository {
         return newMood.save();
     }
 
+    async findById(id: string): Promise<MoodDocument | null> {
+        return MoodModel.findById(id).exec();
+    }
+
     async findByUserId(userId: string): Promise<MoodDocument[]> {
         return MoodModel.find({ userId }).sort({ createdAt: -1 }).populate('userId', 'name email').exec();
     }
@@ -26,6 +30,11 @@ export class MoodRepository {
         const result: Record<string, number> = { happy: 0, sad: 0, neutral: 0, angry: 0 };
         stats.forEach(stat => result[stat._id as string] = stat.count);
         return result;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        const result = await MoodModel.deleteOne({ _id: id }).exec();
+        return result.deletedCount > 0;
     }
 
     async getTrend(userId?: string): Promise<any> {

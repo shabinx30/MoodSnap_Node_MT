@@ -58,4 +58,25 @@ router.get('/trend', async (req: any, res) => {
     }
 });
 
+router.delete('/:id', async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        const mood = await moodRepo.findById(id);
+
+        if (!mood) {
+            return res.status(404).json({ error: "Mood not found" });
+        }
+
+        if (req.user.role !== 'admin' && mood.userId.toString() !== req.user.id) {
+            return res.status(403).json({ error: "Unauthorized" });
+        }
+
+        await moodRepo.delete(id);
+        await broadcastStatsUpdate();
+        res.json({ message: "Mood deleted" });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
