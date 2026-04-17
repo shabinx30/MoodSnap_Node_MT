@@ -25,16 +25,26 @@ export const login = async (email: string, password: string) => {
     return res.json();
 };
 
-const getAuthHeaders = () => {
-    const stored = localStorage.getItem("moodsnap_user");
-    if (stored) {
-        const { accessToken } = JSON.parse(stored);
-        return {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-        };
+const getAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+
+    if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("moodsnap_user");
+        if (stored) {
+            try {
+                const { accessToken } = JSON.parse(stored);
+                if (accessToken) {
+                    headers["Authorization"] = `Bearer ${accessToken}`;
+                }
+            } catch (e) {
+                console.error("Failed to parse auth headers:", e);
+            }
+        }
     }
-    return { "Content-Type": "application/json" };
+
+    return headers;
 };
 
 export const fetchMoods = async () => {
