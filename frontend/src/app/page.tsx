@@ -36,7 +36,7 @@ export default function LoginPage() {
     return (
         <div className="flex items-center justify-center min-h-screen p-4">
             <div className="glass-panel rounded-2xl p-8 w-full max-w-md relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-indigo-500"></div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-purple-500 to-indigo-500"></div>
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold mb-2 flex items-center justify-center gap-2">
                         <span className="text-3xl">✨</span> MoodSnap
